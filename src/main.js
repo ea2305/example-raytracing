@@ -28,6 +28,11 @@ class Vector {
     return new Vector(x - u.x, y - u.y, z - u.z);
   }
 
+  subtractPoint (u) {
+    let { x, y, z } = this;
+    return new Vector(x - u, y - u, z - u);
+  }
+
   add (u) {
     let { x, y, z } = this;
     return new Vector(x + u.x, y + u.y, z + u.z);
@@ -48,10 +53,11 @@ class Vector {
 }
 
 class Sphere {
-  constructor (center, radious, color = [0, 0, 0]) {
+  constructor (center, radious, specular, color = [0, 0, 0]) {
     this.center = center;
     this.radious = radious;
     this.color = color
+    this.specular = specular;
   }
 }
 
@@ -70,10 +76,10 @@ const origin = new Vector(0, 0, 0);
 const viewport = new Vector(1, 1, 1); // viewport position in 3d space
 // demo objects for the scene
 const spheres = [
-  new Sphere(new Vector(0, -1, 3), 1, [255, 0, 0]),
-  new Sphere(new Vector(2, 0, 4), 1, [0, 0, 255]),
-  new Sphere(new Vector(-2, 0, 4), 1, [0, 255, 0]),
-  new Sphere(new Vector(0, -5001, 0), 5000, [255, 255, 0]) // big yellow sphere
+  new Sphere(new Vector(0, -1, 3), 1, 500, [255, 0, 0]),
+  new Sphere(new Vector(2, 0, 4), 1, 500, [0, 0, 255]),
+  new Sphere(new Vector(-2, 0, 4), 1, 10, [0, 255, 0]),
+  new Sphere(new Vector(0, -5001, 0), 5000, 1000, [255, 255, 0]) // big yellow sphere
 ]
 
 const lights = [
@@ -128,21 +134,36 @@ function intersectRaySphere (origin, direction, sphere) {
   return [t1, t2];
 }
 
-function computeLighting(P, N) {
+function computeLighting(P, N, V, s) {
   let i = 0.0;
   lights.forEach(light => {
     if (light.type === 'ambient') {
       i += light.intensity;
     } else {
-      let L = new Vector();
+      let L;
+      let R;
       if (light.type === 'point') {
         L = light.position.subtract(P);
       } else {
         L = light.direction;
       }
+
+      // diffuse calculation
       let n_dot_1 = N.dot(L);
       if (n_dot_1 > 0) {
         i += (n_dot_1 * light.intensity) / (N.vectorLength() * L.vectorLength());
+      }
+
+      // specular calculation
+      if (s != -1) {
+        R = N
+          .dotScalar(N.dot(L))
+          .dotScalar(2)
+          .subtract(L);
+        let r_dot_v = R.dot(V);
+        if (r_dot_v > 0) {
+          i += light.intensity * Math.pow(r_dot_v / (R.vectorLength() * V.vectorLength()), s);
+        }
       }
     }
   });
@@ -151,6 +172,15 @@ function computeLighting(P, N) {
 
 function between (value, min, max) {
   return value >= min && value <= max
+}
+
+// returns array with rgb channels
+function representColorAndLight(color, light) {
+  return [
+    Math.max(0, color[0] * light),  //r
+    Math.max(0, color[1] * light),  //g
+    Math.max(0, color[2] * light)   //b
+  ];
 }
 
 function traceRay (origin, direction, min, max) {
@@ -181,12 +211,8 @@ function traceRay (origin, direction, min, max) {
   let N = P.subtract(closest_sphere.center);
   let nLength = N.vectorLength();
   N = N.dotScalar((1/nLength))
-  const light = computeLighting(P, N);
-  return [
-    closest_sphere.color[0] * light,  //r
-    closest_sphere.color[1] * light,  //g
-    closest_sphere.color[2] * light   //b
-  ];
+  const light = computeLighting(P, N, direction.dotScalar(-1), closest_sphere.specular);
+  return representColorAndLight(closest_sphere.color, light);
 }
 
 for (let x = -canvas.width / 2; x < canvas.width / 2; x++) {
