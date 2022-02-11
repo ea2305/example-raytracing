@@ -15,16 +15,35 @@ class Vector {
 
   dot (u) {
     let { x, y, z } = this;
-    return (x * u.x) + (y * u.y) + (z * u.z)
+    return (x * u.x) + (y * u.y) + (z * u.z);
+  }
+
+  dotScalar (u) {
+    let { x, y, z } = this;
+    return new Vector(x * u, y * u, z * u);
   }
 
   subtract (u) {
     let { x, y, z } = this;
-    return new Vector(x - u.x, y - u.y, z - u.z)
+    return new Vector(x - u.x, y - u.y, z - u.z);
+  }
+
+  add (u) {
+    let { x, y, z } = this;
+    return new Vector(x + u.x, y + u.y, z + u.z);
+  }
+
+  addPoint (u) {
+    let { x, y, z } = this;
+    return new Vector(x + u, y + u, z + u);
+  }
+
+  vectorLength () {
+    return Math.sqrt(this.dot(this));
   }
 
   log () {
-    console.log(`[${this.x}, ${this.y}, ${this.z}]`)
+    console.log(`[${this.x}, ${this.y}, ${this.z}]`);
   }
 }
 
@@ -36,15 +55,31 @@ class Sphere {
   }
 }
 
+class Light {
+  constructor(position, direction, intensity = 0.0, type = 'ambient') {
+    this.type = type;
+    this.intensity = intensity;
+    this.position = position;
+    this.direction = direction;
+  }
+}
+
 // Origin point of view, the camera lives here
 const origin = new Vector(0, 0, 0);
 // The inclination of the viewport and the distance (Z)
 const viewport = new Vector(1, 1, 1); // viewport position in 3d space
-
+// demo objects for the scene
 const spheres = [
   new Sphere(new Vector(0, -1, 3), 1, [255, 0, 0]),
   new Sphere(new Vector(2, 0, 4), 1, [0, 0, 255]),
-  new Sphere(new Vector(-2, 0, 4), 1, [0, 255, 0])
+  new Sphere(new Vector(-2, 0, 4), 1, [0, 255, 0]),
+  new Sphere(new Vector(0, -5001, 0), 5000, [255, 255, 0]) // big yellow sphere
+]
+
+const lights = [
+  new Light(null, null, 0.2),
+  new Light(new Vector(2,1,0), null, 0.6, 'point'),
+  new Light(null, new Vector(1,4,4), 0.2, 'directional')
 ]
 
 function updateCanvas () {
@@ -59,7 +94,7 @@ function putPixel (x, y, color) {
     return;
   }
 
-  var offset = 4*x + canvasPitch*y;
+  var offset = 4 * x + canvasPitch * y;
   canvasBuffer.data[offset++] = color[0];
   canvasBuffer.data[offset++] = color[1];
   canvasBuffer.data[offset++] = color[2];
@@ -93,11 +128,32 @@ function intersectRaySphere (origin, direction, sphere) {
   return [t1, t2];
 }
 
+function computeLighting(P, N) {
+  let i = 0.0;
+  lights.forEach(light => {
+    if (light.type === 'ambient') {
+      i += light.intensity;
+    } else {
+      let L = new Vector();
+      if (light.type === 'point') {
+        L = light.position.subtract(P);
+      } else {
+        L = light.direction;
+      }
+      let n_dot_1 = N.dot(L);
+      if (n_dot_1 > 0) {
+        i += (n_dot_1 * light.intensity) / (N.vectorLength() * L.vectorLength());
+      }
+    }
+  });
+  return i;
+}
+
 function between (value, min, max) {
   return value >= min && value <= max
 }
 
-function TraceRay (origin, direction, min, max) {
+function traceRay (origin, direction, min, max) {
   let closest_t = Infinity;
   let closest_sphere;
 
@@ -117,14 +173,27 @@ function TraceRay (origin, direction, min, max) {
     return BACKGROUND;
   }
 
-  return closest_sphere.color;
+  // calculate lights with color
+  let P = origin.add(
+    direction.dotScalar(closest_t)
+  );
+  
+  let N = P.subtract(closest_sphere.center);
+  let nLength = N.vectorLength();
+  N = N.dotScalar((1/nLength))
+  const light = computeLighting(P, N);
+  return [
+    closest_sphere.color[0] * light,  //r
+    closest_sphere.color[1] * light,  //g
+    closest_sphere.color[2] * light   //b
+  ];
 }
 
 for (let x = -canvas.width / 2; x < canvas.width / 2; x++) {
   for (let y = -canvas.height / 2; y < canvas.height / 2; y++) {
     const point = new Vector(x,y);
     const direction = canvasToViewport(point);
-    const color = TraceRay(origin, direction, 1, 1000);
+    const color = traceRay(origin, direction, 1, 1000);
     putPixel(point.x, point.y, color);
   }
 }
