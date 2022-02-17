@@ -136,6 +136,7 @@ function intersectRaySphere (origin, direction, sphere) {
 
 function computeLighting(P, N, V, s) {
   let i = 0.0;
+  let max = 1;
   lights.forEach(light => {
     if (light.type === 'ambient') {
       i += light.intensity;
@@ -144,30 +145,56 @@ function computeLighting(P, N, V, s) {
       let R;
       if (light.type === 'point') {
         L = light.position.subtract(P);
+        max = 1;
       } else {
         L = light.direction;
+        max = Infinity;
       }
 
-      // diffuse calculation
-      let n_dot_1 = N.dot(L);
-      if (n_dot_1 > 0) {
-        i += (n_dot_1 * light.intensity) / (N.vectorLength() * L.vectorLength());
-      }
-
-      // specular calculation
-      if (s != -1) {
-        R = N
-          .dotScalar(N.dot(L))
-          .dotScalar(2)
-          .subtract(L);
-        let r_dot_v = R.dot(V);
-        if (r_dot_v > 0) {
-          i += light.intensity * Math.pow(r_dot_v / (R.vectorLength() * V.vectorLength()), s);
+      // looks for intersactions to display shadow
+      const {
+        closest_sphere: shadowSphere
+      } = closestIntersection(P, L, 0.001, max); // min should be less than zero to avoid intercepts itself
+      if (!shadowSphere) {
+        // diffuse calculation
+        let n_dot_1 = N.dot(L);
+        if (n_dot_1 > 0) {
+          i += (n_dot_1 * light.intensity) / (N.vectorLength() * L.vectorLength());
+        }
+  
+        // specular calculation
+        if (s != -1) {
+          R = N
+            .dotScalar(N.dot(L))
+            .dotScalar(2)
+            .subtract(L);
+          let r_dot_v = R.dot(V);
+          if (r_dot_v > 0) {
+            i += light.intensity * Math.pow(r_dot_v / (R.vectorLength() * V.vectorLength()), s);
+          }
         }
       }
     }
   });
   return i;
+}
+
+function closestIntersection(origin, direction, min, max) {
+  let closest_t = Infinity;
+  let closest_sphere;
+
+  spheres.forEach(sphere => {
+    // calculate posible collitions with the spheres
+    const intersections = intersectRaySphere(origin, direction, sphere) // t1, t2
+    // are they between the ranges and are they closer to the camera?
+    intersections.forEach((t) => {
+      if (between(t, min, max) && t < closest_t) {
+        closest_t = t;
+        closest_sphere = sphere;
+      }
+    })
+  });
+  return { closest_sphere, closest_t };
 }
 
 function between (value, min, max) {
@@ -184,20 +211,10 @@ function representColorAndLight(color, light) {
 }
 
 function traceRay (origin, direction, min, max) {
-  let closest_t = Infinity;
-  let closest_sphere;
-
-  spheres.forEach(sphere => {
-    // calculate posible collitions with the spheres
-    const intersections = intersectRaySphere(origin, direction, sphere) // t1, t2
-    // are they between the ranges and are they closer to the camera?
-    intersections.forEach((t) => {
-      if (between(t, min, max) && t < closest_t) {
-        closest_t = t;
-        closest_sphere = sphere;
-      }
-    })
-  });
+  const {
+    closest_sphere,
+    closest_t
+  } = closestIntersection(origin, direction, min, max)
   
   if (!closest_sphere) {
     return BACKGROUND;
