@@ -7,6 +7,7 @@ This projects is split in branches to recreate the original order of the book:
 - Simple Raytracing
 - Lights 1 | Diffuse 
 - Lights 2 | Specular
+- Shadows
 - More soon...
 
 Notes of RayTracer implementation
